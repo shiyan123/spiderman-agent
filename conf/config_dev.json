@@ -1,0 +1,9 @@
+{
+  "server": {
+    "address": "",
+    "port": 10081
+  },
+  "centerServer":{
+    "url":"http://127.0.0.1:8001"
+  }
+}
