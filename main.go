@@ -18,5 +18,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	s.Start()
+
+	//monitor task 
+	err = service.MonitorTask(s)
+	if err != nil {
+		panic(err)
+	}
 }
