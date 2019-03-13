@@ -8,3 +8,7 @@ import (
 func EncodeTimeStr(day time.Time) string {
 	return hex.EncodeToString([]byte(day.Format("2006-01-02 15:04:05")))
 }
+
+func EncodeStr(src string) string {
+	return hex.EncodeToString([]byte(src))
+}

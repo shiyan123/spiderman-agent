@@ -15,7 +15,11 @@ type TaskInfo struct {
 }
 
 type TaskConfig struct {
-	TaskType int
-	BeginAt  int64
-	Status   int
+	TaskType        int    //任务类型
+	CreatedAt       int64  //创建时间
+	LastBeginAt     int64  //上一次开始时间
+	LastEndAt       int64  //上一次结束时间
+	ProgramUpdateAt int64  //任务程序更新时间
+	Path            string //运行目录
+	Status          int    //运行状态
 }

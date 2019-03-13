@@ -14,19 +14,13 @@ import (
 	"time"
 )
 
-type ServicesInfo struct {
-	IP          string
-	Name        string
-	MachineInfo *health.MachineHealth
-	TaskMap     map[string]*model.TaskInfo
-}
-
 type Service struct {
-	Name    string
-	Info    *ServicesInfo
-	stop    chan error
-	leaseId clientv3.LeaseID
-	client  *clientv3.Client
+	Name      string
+	Info      *model.ServiceInfo
+	stop      chan error
+	leaseId   clientv3.LeaseID
+	client    *clientv3.Client
+	clientTTL int64
 }
 
 func RegisterService() (*Service, error) {
@@ -40,10 +34,11 @@ func RegisterService() (*Service, error) {
 	}
 
 	s := &Service{
-		Name:   fmt.Sprintf("services/%s/%s", app.GetApp().Config.Server.RegisterName, utils.EncodeTimeStr(time.Now())),
-		Info:   initServicesInfo(),
-		stop:   make(chan error),
-		client: cli,
+		Name:      genName(),
+		Info:      model.InitServiceInfo(),
+		stop:      make(chan error),
+		client:    cli,
+		clientTTL: getClientTTL(),
 	}
 
 	// register service to etcd
@@ -60,33 +55,48 @@ func RegisterService() (*Service, error) {
 }
 
 func (s *Service) register() (leaseId clientv3.LeaseID, err error) {
-	machineInfo, err := health.GetMachineHealth()
-	if err != nil {
-		return
-	}
-	s.Info.MachineInfo = machineInfo
 
-	info := &s.Info
-	value, err := json.Marshal(info)
+	value, err := s.getOriginalInfo()
+	if value == "" || err != nil {
+		return leaseId, err
+	}
+
+	resp, err := s.client.Grant(context.TODO(), s.clientTTL)
 	if err != nil {
 		return
 	}
-	resp, err := s.client.Grant(context.TODO(), 5)
-	if err != nil {
-		return
-	}
-	_, err = s.client.Put(context.TODO(), s.Name, string(value), clientv3.WithLease(resp.ID))
+	_, err = s.client.Put(context.TODO(), s.Name, value, clientv3.WithLease(resp.ID))
 	if err != nil {
 		return
 	}
 	return resp.ID, nil
 }
 
-func initServicesInfo() *ServicesInfo {
-	return &ServicesInfo{
-		IP:   app.GetApp().Config.Server.RegisterIp,
-		Name: app.GetApp().Config.Server.RegisterName,
+func (s *Service) getOriginalInfo() (string, error) {
+
+	//get original service info
+	fmt.Println("get original info")
+	resp, err := s.client.Get(context.Background(), s.Name, clientv3.WithPrefix())
+	if err != nil {
+		return "", err
 	}
+	if len(resp.Kvs) > 0 {
+		value := ""
+		for _, v := range resp.Kvs {
+			value = string(v.Value)
+		}
+		var info model.ServiceInfo
+		err = json.Unmarshal([]byte(value), &info)
+		if err != nil {
+			return "", err
+		}
+		s.Info = &info
+	}
+	body, err := json.Marshal(s.Info)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
 }
 
 func (s *Service) StartKeepAlive(leaseId clientv3.LeaseID) error {
@@ -96,7 +106,6 @@ func (s *Service) StartKeepAlive(leaseId clientv3.LeaseID) error {
 		return err
 	}
 
-	//todo 待优化
 	for {
 		select {
 		case err := <-s.stop:
@@ -106,15 +115,40 @@ func (s *Service) StartKeepAlive(leaseId clientv3.LeaseID) error {
 			return errors.New("server closed")
 		case _, ok := <-ch:
 			if !ok {
-				log.Println("keep alive channel closed")
 				s.revoke()
-				return nil
+				return errors.New("keep alive channel closed")
 			} else {
+				leaseId, err := s.keepAlive()
+				if err != nil {
+					return errors.New(fmt.Sprintf("leaseId: %d, keep alive send error", leaseId))
+				}
+
 				body, _ := json.Marshal(s.Info)
+				fmt.Println("当前info：")
 				fmt.Println(string(body))
 			}
 		}
 	}
+}
+
+func (s *Service) keepAlive() (leaseId clientv3.LeaseID, err error) {
+
+	MachineInfo, err := health.GetMachineHealth()
+	if err != nil {
+		return
+	}
+	s.Info.MachineInfo = MachineInfo
+
+	body, _ := json.Marshal(s.Info)
+	resp, err := s.client.Grant(context.TODO(), s.clientTTL)
+	if err != nil {
+		return
+	}
+	_, err = s.client.Put(context.TODO(), s.Name, string(body), clientv3.WithLease(resp.ID))
+	if err != nil {
+		return
+	}
+	return resp.ID, nil
 }
 
 func (s *Service) Stop() {
@@ -129,4 +163,21 @@ func (s *Service) revoke() error {
 	}
 	log.Printf("servide:%s stop\n", s.Name)
 	return err
+}
+
+func genName() string {
+	temp := fmt.Sprintf("%s-%s",
+		app.GetApp().Config.Server.RegisterName,
+		app.GetApp().Config.Server.RegisterIp)
+
+	return fmt.Sprintf("services/%s/%s",
+		app.GetApp().Config.Server.RegisterName,
+		utils.EncodeStr(temp))
+}
+
+func getClientTTL() int64 {
+	if app.GetApp().Config.Server.ClientTTL == 0 {
+		return 5
+	}
+	return app.GetApp().Config.Server.ClientTTL
 }

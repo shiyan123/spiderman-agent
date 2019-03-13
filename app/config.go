@@ -3,7 +3,6 @@ package app
 import (
 	"encoding/json"
 	"os"
-	"spiderman-agent/common/model"
 	"spiderman-agent/utils"
 )
 
@@ -15,6 +14,7 @@ type Config struct {
 type ServerConfig struct {
 	Address      string
 	Port         int
+	ClientTTL    int64
 	RegisterIp   string
 	RegisterName string
 }
@@ -22,6 +22,10 @@ type ServerConfig struct {
 type CenterServerConfig struct {
 	URL string
 	Ips []string
+}
+
+type CenterIpsResp struct {
+	IpList []string `json:"ipList"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -45,7 +49,7 @@ func InitCenterConfig(url string, config *Config) (err error) {
 	if err != nil {
 		return
 	}
-	var ips model.CenterIpsResp
+	var ips CenterIpsResp
 	err = json.Unmarshal(resp, &ips)
 	if err != nil {
 		return
