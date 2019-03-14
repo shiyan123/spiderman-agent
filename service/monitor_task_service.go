@@ -12,13 +12,7 @@ func MonitorTask(s *Service) (err error) {
 	rch := s.client.Watch(context.Background(), s.Name, clientv3.WithPrefix())
 	for resp := range rch {
 		for _, ev := range resp.Events {
-			switch ev.Type {
-			case clientv3.EventTypePut:
-				// monitor task change
-				checkTaskMap(ev, s)
-			case clientv3.EventTypeDelete:
-				//todo someing
-			}
+			checkTaskMap(ev, s)
 		}
 	}
 	return
@@ -31,29 +25,51 @@ func checkTaskMap(ev *clientv3.Event, s *Service) {
 		return
 	}
 
-	for taskId, remoteTask := range remoteInfo.TaskMap {
-		has, localTask := taskExist(taskId, s)
+	switch ev.Type {
+	case clientv3.EventTypePut:
+		// monitor task change
+		dealWith(remoteInfo, s)
+	case clientv3.EventTypeDelete:
+		//stop services
+		s.Stop()
+	}
+	return
+}
+
+func dealWith(info *model.ServiceInfo, s *Service) {
+	for taskId, remoteTask := range info.TaskMap {
+		has, localTask := exist(taskId, s)
 		if !has {
 			fmt.Println("节点增加任务")
-			s.Info.TaskMap[remoteTask.TaskId] = remoteTask
-			//todo 运行任务
-		}else{
-			//check task and deal with task
-			taskDetail(remoteTask, localTask)
-			//todo 更改任务状态
+			start(remoteTask, s)
+		} else {
+			fmt.Println("已经存在任务")
+			check(remoteTask, localTask, s)
 		}
 	}
 	return
 }
 
-func taskExist(taskId string, s *Service) (bool, *model.TaskInfo) {
+func exist(taskId string, s *Service) (bool, *model.TaskInfo) {
 	if task, ok := s.Info.TaskMap[taskId]; ok {
 		return true, task
 	}
 	return false, nil
 }
 
-func taskDetail(remoteTask, localTask *model.TaskInfo) {
-	fmt.Printf("远程任务: %s \n", remoteTask.TaskName)
-	fmt.Printf("本地任务: %s \n", localTask.TaskName)
+func start(remote *model.TaskInfo, s *Service) {
+	s.Info.TaskMap[remote.TaskId] = remote
+	GetAccountService().init(remote)
+}
+
+func check(remote, local *model.TaskInfo, s *Service) {
+	if remote.Config.ProgramUpdateAt != local.Config.ProgramUpdateAt {
+		switch remote.Config.Status {
+		case model.TaskStatus_Stop:
+			GetAccountService().stop(local)
+		case model.TaskStatus_Start:
+			GetAccountService().init(remote)
+		}
+	}
+	s.Info.TaskMap[remote.TaskId] = remote
 }

@@ -49,7 +49,8 @@ func RegisterService() (*Service, error) {
 
 	//keepAlive service
 	go func() {
-		s.StartKeepAlive(leaseId)
+		err = s.StartKeepAlive(leaseId)
+		fmt.Printf("keepalive is err :%s  \n", err.Error())
 	}()
 	return s, nil
 }
@@ -152,7 +153,7 @@ func (s *Service) keepAlive() (leaseId clientv3.LeaseID, err error) {
 }
 
 func (s *Service) Stop() {
-	s.stop <- nil
+	s.stop <- errors.New("server stopped")
 }
 
 func (s *Service) revoke() error {
