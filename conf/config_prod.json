@@ -5,6 +5,6 @@
     "clientTTL":20
   },
   "centerServer":{
-    "url":"http://127.0.0.1:8001"
+    "url":"http://127.0.0.1:10082/center/api/v1/etcd/ips"
   }
 }
