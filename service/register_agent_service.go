@@ -16,7 +16,7 @@ import (
 
 type Service struct {
 	Name      string
-	Info      *model.ServiceInfo
+	Node      *model.Node
 	stop      chan error
 	leaseId   clientv3.LeaseID
 	client    *clientv3.Client
@@ -35,7 +35,7 @@ func RegisterService() (*Service, error) {
 
 	s := &Service{
 		Name:      genName(),
-		Info:      model.InitServiceInfo(),
+		Node:      model.InitNode(genID()),
 		stop:      make(chan error),
 		client:    cli,
 		clientTTL: getClientTTL(),
@@ -86,14 +86,14 @@ func (s *Service) getOriginalInfo() (string, error) {
 		for _, v := range resp.Kvs {
 			value = string(v.Value)
 		}
-		var info model.ServiceInfo
-		err = json.Unmarshal([]byte(value), &info)
+		var n model.Node
+		err = json.Unmarshal([]byte(value), &n)
 		if err != nil {
 			return "", err
 		}
-		s.Info = &info
+		s.Node = &n
 	}
-	body, err := json.Marshal(s.Info)
+	body, err := json.Marshal(s.Node)
 	if err != nil {
 		return "", err
 	}
@@ -124,7 +124,7 @@ func (s *Service) StartKeepAlive(leaseId clientv3.LeaseID) error {
 					return errors.New(fmt.Sprintf("leaseId: %d, keep alive send error", leaseId))
 				}
 
-				body, _ := json.Marshal(s.Info)
+				body, _ := json.Marshal(s.Node)
 				fmt.Println("当前info：")
 				fmt.Println(string(body))
 			}
@@ -138,9 +138,9 @@ func (s *Service) keepAlive() (leaseId clientv3.LeaseID, err error) {
 	if err != nil {
 		return
 	}
-	s.Info.MachineInfo = MachineInfo
+	s.Node.MachineInfo = MachineInfo
 
-	body, _ := json.Marshal(s.Info)
+	body, _ := json.Marshal(s.Node)
 	resp, err := s.client.Grant(context.TODO(), s.clientTTL)
 	if err != nil {
 		return
@@ -174,6 +174,14 @@ func genName() string {
 	return fmt.Sprintf("services/%s/%s",
 		app.GetApp().Config.Server.RegisterName,
 		utils.EncodeStr(temp))
+}
+
+func genID() string {
+	temp := fmt.Sprintf("%s-%s",
+		app.GetApp().Config.Server.RegisterName,
+		app.GetApp().Config.Server.RegisterIp)
+
+	return utils.EncodeStr(temp)
 }
 
 func getClientTTL() int64 {

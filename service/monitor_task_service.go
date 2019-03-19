@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.etcd.io/etcd/clientv3"
 	"spiderman-agent/common/model"
+
+	"go.etcd.io/etcd/clientv3"
 )
 
 func MonitorTask(s *Service) (err error) {
@@ -19,7 +20,7 @@ func MonitorTask(s *Service) (err error) {
 }
 
 func checkTaskMap(ev *clientv3.Event, s *Service) {
-	remoteInfo := &model.ServiceInfo{}
+	remoteInfo := &model.Node{}
 	err := json.Unmarshal([]byte(ev.Kv.Value), remoteInfo)
 	if err != nil {
 		return
@@ -36,7 +37,7 @@ func checkTaskMap(ev *clientv3.Event, s *Service) {
 	return
 }
 
-func dealWith(info *model.ServiceInfo, s *Service) {
+func dealWith(info *model.Node, s *Service) {
 	for taskId, remoteTask := range info.TaskMap {
 		has, localTask := exist(taskId, s)
 		if !has {
@@ -51,14 +52,14 @@ func dealWith(info *model.ServiceInfo, s *Service) {
 }
 
 func exist(taskId string, s *Service) (bool, *model.TaskInfo) {
-	if task, ok := s.Info.TaskMap[taskId]; ok {
+	if task, ok := s.Node.TaskMap[taskId]; ok {
 		return true, task
 	}
 	return false, nil
 }
 
 func start(remote *model.TaskInfo, s *Service) {
-	s.Info.TaskMap[remote.TaskId] = remote
+	s.Node.TaskMap[remote.TaskId] = remote
 	GetAccountService().init(remote)
 }
 
@@ -71,5 +72,5 @@ func check(remote, local *model.TaskInfo, s *Service) {
 			GetAccountService().init(remote)
 		}
 	}
-	s.Info.TaskMap[remote.TaskId] = remote
+	s.Node.TaskMap[remote.TaskId] = remote
 }
