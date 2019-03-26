@@ -13,6 +13,7 @@ const (
 type TaskInfo struct {
 	TaskId   string      `json:"taskId"`
 	TaskName string      `json:"taskName"`
+	GroupName string      `json:"groupName"`
 	Config   *TaskConfig `json:"config"`
 }
 
